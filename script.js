@@ -1,5 +1,6 @@
 // 장비 데이터를 저장할 전역 변수
 let equipmentData = [];
+const DEFAULT_MATERIALS = ['식양', '적동', '혁동'];
 
 /**
  * CSV 데이터를 파싱하는 함수 (정규표현식 사용 안 함)
@@ -59,6 +60,7 @@ async function loadEquipmentData() {
 
 let currentItem = null;
 let activeFilterContext = null;
+let activeMaterial = null;
 
 function init() {
     const sidebar = document.getElementById('sidebar');
@@ -89,7 +91,6 @@ function init() {
         row.id = `item-${index}`;
         row.title = item.name;
 
-        // 모바일: 스크롤 오탐 방지 후 즉각 반응 (touch-action: manipulation과 조합)
         let touchMoved = false;
         row.addEventListener('touchstart', () => { touchMoved = false; }, { passive: true });
         row.addEventListener('touchmove', () => { touchMoved = true; }, { passive: true });
@@ -99,7 +100,6 @@ function init() {
                 selectItem(index);
             }
         });
-        // PC 환경 대응
         row.addEventListener('click', () => selectItem(index));
 
         const img = document.createElement('img');
@@ -114,7 +114,71 @@ function init() {
     sidebar.addEventListener('scroll', updateScrollIndicators);
     window.addEventListener('scroll', updateScrollIndicators); // 모바일 전체 스크롤 대응
 
+    renderMaterialButtons();
     selectItem(0);
+}
+
+function getItemMaterial(item) {
+    return item && item.material ? item.material.trim() : "";
+}
+
+function getMaterialLabel(material) {
+    return material ? `${material} 부품` : "재료 없음";
+}
+
+function getMaterialButtonLabel(material) {
+    if (!activeFilterContext || !currentItem) {
+        return getMaterialLabel(material);
+    }
+
+    return `${getMaterialLabel(material)} (${countFilteredItems(material)})`;
+}
+
+function getMaterialOptions() {
+    const materials = [...DEFAULT_MATERIALS];
+
+    equipmentData.forEach(item => {
+        const material = getItemMaterial(item);
+        if (material && !materials.includes(material)) {
+            materials.push(material);
+        }
+    });
+
+    return materials;
+}
+
+function renderMaterialButtons() {
+    const area = document.getElementById('materialFilterArea');
+    if (!area) return;
+
+    area.innerHTML = '';
+
+    getMaterialOptions().forEach(material => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'material-filter-btn';
+        button.dataset.material = material;
+        button.textContent = getMaterialButtonLabel(material);
+        button.addEventListener('click', () => toggleMaterialFilter(material));
+        area.appendChild(button);
+    });
+
+    syncMaterialButtons();
+}
+
+function syncMaterialButtons() {
+    document.querySelectorAll('.material-filter-btn').forEach(button => {
+        button.classList.toggle('active', button.dataset.material === activeMaterial);
+        button.textContent = getMaterialButtonLabel(button.dataset.material);
+    });
+}
+
+function toggleMaterialFilter(material) {
+    if (!activeFilterContext) return;
+
+    activeMaterial = activeMaterial === material ? null : material;
+    applyActiveFilter();
+    scrollToFirstFilteredItem();
 }
 
 /**
@@ -178,6 +242,7 @@ function selectItem(index) {
     updateDetailView(currentItem);
 
     if (activeFilterContext) {
+        applyActiveFilter();
         syncFilterHighlight(currentItem);
     }
 }
@@ -218,6 +283,7 @@ function updateDetailView(item) {
     document.getElementById('traitValue').textContent = item.tv;
 
     document.getElementById('detailCategory').textContent = item.category || "부품";
+    document.getElementById('detailMaterial').textContent = getMaterialLabel(getItemMaterial(item));
 }
 
 // 3. 필터링 로직
@@ -242,18 +308,14 @@ function filterByStat(statNum) {
 
     const targetVal = parseValue(targetStatValRaw);
 
-    activeFilterContext = { name: targetStatName, value: targetVal, type: 'basic' };
-
-    applyFilter((item) => {
-        const val1 = item.s1 === targetStatName ? parseValue(item.v1) : -1;
-        const val2 = item.s2 === targetStatName ? parseValue(item.v2) : -1;
-        const maxVal = Math.max(val1, val2);
-
-        return {
-            match: maxVal >= targetVal,
-            exceed: maxVal > targetVal
-        };
-    }, `${targetStatName} ${targetStatValRaw} 이상`);
+    activeFilterContext = {
+        name: targetStatName,
+        value: targetVal,
+        type: 'basic',
+        message: `${targetStatName} ${targetStatValRaw} 이상`
+    };
+    activeMaterial = null;
+    applyActiveFilter();
 
     syncFilterHighlight(currentItem);
 }
@@ -265,29 +327,94 @@ function filterByTrait() {
     const targetValRaw = currentItem.tv;
     const targetVal = parseValue(targetValRaw);
 
-    activeFilterContext = { name: targetName, value: targetVal, type: 'trait' };
+    activeFilterContext = {
+        name: targetName,
+        value: targetVal,
+        type: 'trait',
+        message: `${targetName} ${targetValRaw} 이상`
+    };
+    activeMaterial = null;
+    applyActiveFilter();
 
-    applyFilter((item) => {
+    syncFilterHighlight(currentItem);
+}
+
+function getActiveFilterResult(item) {
+    if (!activeFilterContext) {
+        return { match: true, exceed: false };
+    }
+
+    const targetName = activeFilterContext.name;
+    const targetVal = activeFilterContext.value;
+
+    if (activeFilterContext.type === 'trait') {
         const val = item.t === targetName ? parseValue(item.tv) : -1;
         return {
             match: val >= targetVal,
             exceed: val > targetVal
         };
-    }, `${targetName} ${targetValRaw} 이상`);
+    }
 
-    syncFilterHighlight(currentItem);
+    const val1 = item.s1 === targetName ? parseValue(item.v1) : -1;
+    const val2 = item.s2 === targetName ? parseValue(item.v2) : -1;
+    const maxVal = Math.max(val1, val2);
+
+    return {
+        match: maxVal >= targetVal,
+        exceed: maxVal > targetVal
+    };
 }
 
-function applyFilter(conditionFn, msg) {
+function getFilteredItemState(item, material) {
+    const result = getActiveFilterResult(item);
+    const isSameCategory = currentItem && (item.category === currentItem.category);
+    const isSameMaterial = !material || getItemMaterial(item) === material;
+
+    return {
+        match: result.match && isSameCategory && isSameMaterial,
+        exceed: result.exceed
+    };
+}
+
+function countFilteredItems(material) {
+    if (!activeFilterContext || !currentItem) return 0;
+
+    return equipmentData.reduce((count, item) => (
+        getFilteredItemState(item, material).match ? count + 1 : count
+    ), 0);
+}
+
+function getFirstFilteredItemIndex(material) {
+    if (!activeFilterContext || !currentItem) return -1;
+
+    return equipmentData.findIndex(item => getFilteredItemState(item, material).match);
+}
+
+function scrollToFirstFilteredItem() {
+    const firstIndex = getFirstFilteredItemIndex(activeMaterial);
+    if (firstIndex < 0) return;
+
+    const row = document.getElementById(`item-${firstIndex}`);
+    if (!row) return;
+
+    row.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+    });
+    setTimeout(updateScrollIndicators, 100);
+}
+
+function applyActiveFilter() {
+    if (!activeFilterContext || !currentItem) return;
+
     equipmentData.forEach((item, index) => {
         const row = document.getElementById(`item-${index}`);
-        const result = conditionFn(item);
-
-        const isSameCategory = currentItem && (item.category === currentItem.category);
+        const result = getFilteredItemState(item, activeMaterial);
 
         row.classList.remove('dimmed', 'exceed');
 
-        if (result.match && isSameCategory) {
+        if (result.match) {
             if (result.exceed) {
                 row.classList.add('exceed');
             }
@@ -297,8 +424,9 @@ function applyFilter(conditionFn, msg) {
     });
 
     document.getElementById('filterInfoArea').style.display = 'block';
-    document.getElementById('filterMsg').textContent = `필터: ${msg} (분류: ${currentItem.category})`;
+    document.getElementById('filterMsg').textContent = `필터: ${activeFilterContext.message} (분류: ${currentItem.category}, 재료: ${activeMaterial ? getMaterialLabel(activeMaterial) : '전체'})`;
     document.getElementById('resetBtn').style.display = 'block';
+    syncMaterialButtons();
 
     // 필터 적용 후 인디케이터 초기 업데이트
     setTimeout(updateScrollIndicators, 100);
@@ -313,6 +441,8 @@ function resetFilter() {
 
     document.querySelectorAll('.stat-row').forEach(row => row.classList.remove('active-filter'));
     activeFilterContext = null;
+    activeMaterial = null;
+    syncMaterialButtons();
 
     // 필터 초기화 시 인디케이터 숨김
     updateScrollIndicators();

@@ -100,7 +100,7 @@
             transition: transform 0.1s, opacity 0.3s, border-color 0.2s;
             background-color: #000;
             border: 2px solid transparent;
-            touch-action: manipulation; /* 모바일 300ms 클릭 딜레이 제거 */
+            touch-action: manipulation;
         }
 
         .item-row:hover {
@@ -212,7 +212,8 @@
             cursor: pointer;
             transition: transform 0.2s, background 0.2s;
             border: 1px solid transparent;
-            touch-action: manipulation; /* 모바일 300ms 클릭 딜레이 제거 */
+            touch-action: manipulation;
+            /* 모바일 300ms 클릭 딜레이 제거 */
         }
 
         .stat-row:hover {
@@ -260,6 +261,37 @@
             display: flex;
             align-items: center;
             gap: 4px;
+        }
+
+        .material-filter {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .material-filter-btn {
+            padding: 10px 6px;
+            background-color: #333;
+            color: var(--text-sub);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            text-align: center;
+            touch-action: manipulation;
+        }
+
+        .material-filter-btn:hover {
+            background-color: #3d3d3d;
+            border-color: #666;
+        }
+
+        .material-filter-btn.active {
+            background-color: rgba(255, 215, 0, 0.15);
+            border-color: var(--accent);
+            color: #fff;
         }
 
         .dot {
@@ -339,6 +371,11 @@
 
             .stat-value {
                 font-size: 0.95rem;
+            }
+
+            .material-filter-btn {
+                font-size: 0.75rem;
+                padding: 8px 4px;
             }
 
             .scroll-indicator {
