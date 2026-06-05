@@ -131,7 +131,7 @@ function getMaterialButtonLabel(material) {
         return getMaterialLabel(material);
     }
 
-    return `${getMaterialLabel(material)} (${countFilteredItems(material)})`;
+    return `${getMaterialLabel(material)} (${countFilteredItems(material)}개)`;
 }
 
 function getMaterialOptions() {
@@ -169,6 +169,7 @@ function renderMaterialButtons() {
 function syncMaterialButtons() {
     document.querySelectorAll('.material-filter-btn').forEach(button => {
         button.classList.toggle('active', button.dataset.material === activeMaterial);
+        button.classList.toggle('exceed', hasFilteredExceedItems(button.dataset.material));
         button.textContent = getMaterialButtonLabel(button.dataset.material);
     });
 }
@@ -176,9 +177,15 @@ function syncMaterialButtons() {
 function toggleMaterialFilter(material) {
     if (!activeFilterContext) return;
 
-    activeMaterial = activeMaterial === material ? null : material;
+    const isClearingMaterial = activeMaterial === material;
+    activeMaterial = isClearingMaterial ? null : material;
     applyActiveFilter();
-    scrollToFirstFilteredItem();
+
+    if (isClearingMaterial) {
+        scrollToCurrentItem();
+    } else {
+        scrollToFirstFilteredItem();
+    }
 }
 
 /**
@@ -384,17 +391,39 @@ function countFilteredItems(material) {
     ), 0);
 }
 
+function hasFilteredExceedItems(material) {
+    if (!activeFilterContext || !currentItem) return false;
+
+    return equipmentData.some(item => {
+        const state = getFilteredItemState(item, material);
+        return state.match && state.exceed;
+    });
+}
+
 function getFirstFilteredItemIndex(material) {
     if (!activeFilterContext || !currentItem) return -1;
 
-    return equipmentData.findIndex(item => getFilteredItemState(item, material).match);
+    const firstMatchIndex = equipmentData.findIndex(item => getFilteredItemState(item, material).match);
+    const firstExceedIndex = equipmentData.findIndex(item => {
+        const state = getFilteredItemState(item, material);
+        return state.match && state.exceed;
+    });
+
+    return firstExceedIndex >= 0 ? firstExceedIndex : firstMatchIndex;
 }
 
 function scrollToFirstFilteredItem() {
-    const firstIndex = getFirstFilteredItemIndex(activeMaterial);
-    if (firstIndex < 0) return;
+    scrollToItemIndex(getFirstFilteredItemIndex(activeMaterial));
+}
 
-    const row = document.getElementById(`item-${firstIndex}`);
+function scrollToCurrentItem() {
+    scrollToItemIndex(equipmentData.indexOf(currentItem));
+}
+
+function scrollToItemIndex(index) {
+    if (index < 0) return;
+
+    const row = document.getElementById(`item-${index}`);
     if (!row) return;
 
     row.scrollIntoView({

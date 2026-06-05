@@ -294,6 +294,12 @@
             color: #fff;
         }
 
+        .material-filter-btn.exceed {
+            border-color: var(--good);
+            box-shadow: 0 0 8px rgba(0, 255, 127, 0.4);
+            color: #fff;
+        }
+
         .dot {
             width: 8px;
             height: 8px;
